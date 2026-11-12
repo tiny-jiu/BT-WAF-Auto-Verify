@@ -1,26 +1,21 @@
-# BT-WAF Auto Verify
+宝塔WAF行为验证绕过可以自动识别并处理宝塔 WAF 插件的五种行为验证。这个项目只针对宝塔 WAF 插件，不适用于宝塔云 WAF。
 
-Automatic detection and protocol handling for five BT-WAF plugin challenge modes. This version is intended for the plugin, not the cloud service.
+脚本支持的验证类型包括滑动验证、人机验证、浏览器验证、图片验证码和 JavaScript 跳转。滑动验证的处理方式是查找验证脚本，提取参数并计算提交值。人机验证的处理方式是读取页面中的参数并提交计算结果。浏览器验证的处理方式是生成接口要求的 `fingerprint` 参数和转换后的参数。图片验证码的处理方式是将下载的验证码图片与本地图库进行匹配。JavaScript 跳转的处理方式是跟随 `btwaf` 参数完成跳转。
 
-## Supported modes
+`captcha/` 目录保存预先收集的 PNG 参考图片。脚本逐像素比较下载的验证码与本地图片，匹配成功后从文件名中读取答案。
 
-| Mode | How it is handled |
-| --- | --- |
-| Slider | Finds the challenge script, extracts its values, and calculates the request |
-| Human check | Reads the embedded values and submits the calculated response |
-| Browser check | Builds the fingerprint and transformed value required by the endpoint |
-| Image code | Matches the downloaded image against the local image library |
-| JavaScript redirect | Follows the `btwaf` redirect parameter |
-
-## Image library
-
-The `captcha/` directory contains 400 pre-generated PNG images. The script compares pixels against the downloaded image and reads the answer from the matching filename.
-
-## Usage
+安装依赖：
 
 ```bash
 pip install requests pillow
+```
+
+运行脚本，参数为目标站点地址：
+
+```bash
 python auto_verify.py http://target.example/
 ```
 
-For security research and authorized testing only.
+脚本会输出检测到的验证类型、验证请求结果和最终页面状态。
+
+仅供安全研究和已获得授权的测试使用。

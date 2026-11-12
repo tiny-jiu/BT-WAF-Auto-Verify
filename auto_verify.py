@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detect and handle five BT-WAF plugin challenge modes."""
+"""自动识别并处理宝塔 WAF 插件的五种行为验证。"""
 
 import base64
 import hashlib
@@ -18,7 +18,7 @@ CAPTCHA_TEXT = "".join(map(chr, (0x9A8C, 0x8BC1, 0x7801)))
 VERIFICATION_TEXT = "".join(map(chr, (0x9A8C, 0x8BC1)))
 
 if len(sys.argv) != 2:
-    print("Usage: python auto_verify.py http://target.example/")
+    print("用法：python auto_verify.py http://target.example/")
     sys.exit(1)
 
 BASE = sys.argv[1].rstrip("/")
@@ -32,7 +32,7 @@ session.headers["User-Agent"] = (
 
 
 def match_captcha(remote_b64):
-    """Return the answer from a pixel-identical local reference image."""
+    """在本地参考图中查找像素完全一致的图片，并从文件名返回验证码答案。"""
     if not os.path.isdir(CAPTCHA_DIR):
         return None
     from PIL import Image
@@ -51,18 +51,18 @@ def match_captcha(remote_b64):
 
 
 def handle_js_challenge(response, challenge_name):
-    """Extract challenge values and submit the calculated response."""
+    """提取验证参数并提交计算结果。"""
     search_name = "renji" if challenge_name == "browser" else challenge_name
     script = re.search(rf'src="(/{search_name}_[^"]+\.js\?[^"]+)"', response.text)
     if not script:
-        print(f"Could not find the {search_name} challenge script.")
+        print(f"找不到 {search_name} 验证脚本。")
         return False
 
     script_response = session.get(f"{BASE}{script.group(1)}", timeout=15)
     key_match = re.search(r'key\s*=\s*"([^"]+)"', script_response.text)
     value_match = re.search(r'value\s*=\s*"([^"]+)"', script_response.text)
     if not key_match or not value_match:
-        print("Could not extract the challenge values.")
+        print("无法提取验证参数。")
         return False
 
     key = key_match.group(1)
@@ -95,46 +95,46 @@ def handle_js_challenge(response, challenge_name):
         verification = session.post(verification_url, timeout=15)
     else:
         verification = session.get(verification_url, timeout=15)
-    print(f"Verification response: {verification.text.strip()}")
-    print(f"Verification status: HTTP {verification.status_code}")
+    print(f"验证响应：{verification.text.strip()}")
+    print(f"验证状态：HTTP {verification.status_code}")
     return True
 
 
 first = session.get(BASE, timeout=15)
-print(f"Initial response: HTTP {first.status_code}")
+print(f"初始响应：HTTP {first.status_code}")
 
 if SLIDER_TEXT in first.text or "huadong" in first.text:
-    print("Detected a slider challenge.")
+    print("检测到滑动验证。")
     handle_js_challenge(first, "huadong")
 elif HUMAN_CHECK_TEXT in first.text or "renji" in first.text:
-    print("Detected a human check.")
+    print("检测到人机验证。")
     handle_js_challenge(first, "renji")
 elif CAPTCHA_TEXT in first.text or "captcha" in first.text:
-    print("Detected an image code challenge.")
+    print("检测到图片验证码。")
     response = session.get(
         f"{BASE}/get_btwaf_captcha_base64?captcha={int(time.time() * 1000)}",
         timeout=15,
     )
     data = response.json()
     if not data.get("status"):
-        print("The image challenge could not be retrieved.")
+        print("无法获取图片验证码。")
         sys.exit(1)
 
     code = match_captcha(data["msg"])
     if not code:
-        print(f"No matching reference image was found in {CAPTCHA_DIR}.")
+        print(f"在 {CAPTCHA_DIR} 中找不到匹配的参考图片。")
         sys.exit(1)
 
     verification = session.get(
         f"{BASE}/Verification_auth_btwaf?captcha={code}", timeout=15
     )
-    print(f"Verification response: {verification.text.strip()}")
+    print(f"验证响应：{verification.text.strip()}")
 elif "fingerprint" in first.text or "Fingerprint2" in first.text or "Rxizm32" in first.text:
-    print("Detected a browser challenge.")
+    print("检测到浏览器验证。")
     key_match = re.search(r"key\s*=\s*'([^']+)'", first.text)
     value_match = re.search(r"value\s*=\s*'([^']+)'", first.text)
     if not key_match or not value_match:
-        print("Could not extract the browser challenge values.")
+        print("无法提取浏览器验证参数。")
         sys.exit(1)
     key = key_match.group(1)
     value = value_match.group(1)
@@ -146,22 +146,22 @@ elif "fingerprint" in first.text or "Fingerprint2" in first.text or "Rxizm32" in
         f"&key={key}&value={transformed}&fingerprint={fingerprint}"
     )
     verification = session.post(verification_url, timeout=15)
-    print(f"Verification response: {verification.text.strip()}")
+    print(f"验证响应：{verification.text.strip()}")
 elif "btwaf=" in first.text or "window.location.href" in first.text:
-    print("Detected a JavaScript redirect challenge.")
+    print("检测到 JavaScript 跳转验证。")
     match = re.search(r'btwaf=(\d+)"', first.text)
     if match:
         session.get(f"{BASE}/?btwaf={match.group(1)}", timeout=15)
     else:
         session.get(BASE, timeout=15)
 else:
-    print("No supported challenge was detected.")
+    print("未检测到支持的验证类型。")
     sys.exit(0)
 
 final = session.get(BASE, timeout=15)
-print(f"Final response: HTTP {final.status_code}")
+print(f"最终响应：HTTP {final.status_code}")
 if final.status_code == 200 and VERIFICATION_TEXT not in final.text and "captcha" not in final.text.lower():
-    print("The final page is available.")
+    print("最终页面可以访问。")
 else:
-    print("The result could not be confirmed.")
+    print("无法确认验证结果。")
     print(final.text[:800])
